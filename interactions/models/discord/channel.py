@@ -407,6 +407,7 @@ class MessageableMixin(SendMixin):
         after: Optional[Snowflake_Type] = MISSING,
         around: Optional[Snowflake_Type] = MISSING,
         reason: Absent[Optional[str]] = MISSING,
+        force_purge: bool = False,
     ) -> int:
         """
         Bulk delete messages within a channel. If a `predicate` is provided, it will be used to determine which messages to delete, otherwise all messages will be deleted within the `deletion_limit`.
@@ -427,6 +428,7 @@ class MessageableMixin(SendMixin):
             after: Search messages after this ID
             around: Search messages around this ID
             reason: The reason for this deletion
+            force_purge: Should messages older than 2 weeks be deleted as well
 
         Returns:
             The total amount of messages deleted
@@ -438,6 +440,7 @@ class MessageableMixin(SendMixin):
                 return True
 
         to_delete = []
+        count = 0
 
         # 1209600 14 days ago in seconds, 1420070400000 is used to convert to snowflake
         fourteen_days_ago = int((time.time() - 1209600) * 1000.0 - DISCORD_EPOCH) << 22
@@ -457,12 +460,15 @@ class MessageableMixin(SendMixin):
                 continue
 
             if message.id < fourteen_days_ago:
-                # message is too old to be purged
+                if force_purge:
+                    count += 1
+                    await self.delete_message(message, reason=reason)
+                # message is too old to be *purged*
                 continue
 
             to_delete.append(message.id)
 
-        count = len(to_delete)
+        count += len(to_delete)
         while len(to_delete):
             iteration = [to_delete.pop() for i in range(min(100, len(to_delete)))]
             await self.delete_messages(iteration, reason=reason)
